@@ -36,7 +36,13 @@ base_path = '/Neteera/Work/homes/dana.shavit/Research/analysis/3.5.11.2/apnea_28
 base_path = '/Neteera/Work/homes/dana.shavit/Research/apnea2021/prepared_data/ahi_data_tamir/'
 base_path = '/Neteera/Work/homes/dana.shavit/Research/apnea2021/prepared_data/ahi_data_stiched/scaled/'
 base_path = '/Neteera/Work/homes/dana.shavit/Research/apnea2021/prepared_data/stitched_1712/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_ds_filter/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config_test/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug_test/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config_test2/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config/scaled/'
+
 
 fn = 'ahi' + '.png'
 posture_class = {'Supine':0, 'Left':2, 'Right':3, 'Prone':1}
@@ -204,6 +210,8 @@ if __name__ == '__main__':
         db.update_mysql_db(sess)
 
         session = db.session_from_setup(sess)
+        # if session != 108186:
+        #     continue
         rejected = [108146, 108152]
         if session in rejected:
             continue
@@ -333,7 +341,7 @@ if __name__ == '__main__':
         # yair_ahi_dict[session] = yair_ahi
         dana_ahi_dict[session] = pahi_from_y
         session_ahi_pdf_dict = {108139: 1.2, 108145: 10.8, 108186: 56.6, 108168: 37.6, 108146: 0.8, 108147: 6.1, 108148: 29.2, 108153: 5.4, 108154: 3.8, 108152: 16.2, 108170: 2.7, 108171: 13.7, 108175: 0.4, 108207: 5.5, 108191: 9.6, 108192: 4.1, 108201: 13.6, 108223: 8.9, 108298: 23.1, 108222: 5.2, 108226: 1.9, 108299: 11.8, 108303: 1.2, 108331: 3.7, 108348: 15.8, 108335: 9.8, 108349: 48.2}
-        num_apneas_from_pred = np.sum(preds)
+        num_apneas_from_pred = 5 * np.sum(preds)
         pahi_from_pred = 4*num_apneas_from_pred/len(preds)
 
         len_valid = len(valid[valid == 1])
@@ -422,7 +430,7 @@ if __name__ == '__main__':
     plt.figure(figsize=(10,10))
 
 
-    for device in range(1,5):
+    for device in range(0,5):
         y_true_2class = []
         y_pred_2class = []
         plt.figure(figsize=(10, 10))
@@ -433,9 +441,12 @@ if __name__ == '__main__':
             for setup, setup_data in session_data.items():
 
                 device_loc = device_map[int(setup_data['device'])]
-                if device_loc != device:
-                    continue
+                if device_loc > 0:
+                    if device_loc != device:
+                        continue
                 try:
+                    plt.xlim((0,60))
+                    plt.ylim((0,60))
                     plt.scatter(setup_data['pahi_from_y'], setup_data['pahi_from_pred_valid'], alpha=0.8, c=color_radar[device_loc], s=5)
                     y_true_2class.append([0 if ahi_class(setup_data['pahi_from_y']) <= 1 else 1])
                     y_pred_2class.append([0 if ahi_class( setup_data['pahi_from_pred_valid']) <= 1 else 1])
@@ -459,8 +470,8 @@ if __name__ == '__main__':
         FP = cm2[1][0]
         plt.title(f"MB2 AHI device {device} TP: {TP}/{(TP+FN)} ,TN: {TN}/{TN+FP}, TOTAL: {TP+TN}/{TP+TN+FN+FP}")
 
-        plt.show()
         plt.savefig(os.path.join(base_path, f'scatter_device_{device}.png'))
+        plt.show()
         plt.close()
     print("y_pred", y_pred)
     print("y_true", y_true)

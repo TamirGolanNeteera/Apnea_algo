@@ -249,8 +249,14 @@ if __name__ == '__main__':
 
     for i_sess, sess in enumerate(sessions):
         # try:
-            phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/MB_new_DS_FILTER/'
-            stitch_dict = stitch_and_align_setups_of_session(sess, phase_dir=phase_dir)
+        #     if sess != 108171:
+        #         continue
+            phase_dir = None
+            phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/MB_new_orig_config'
+            try:
+                stitch_dict = stitch_and_align_setups_of_session(sess, phase_dir=phase_dir)
+            except:
+                continue
             for setups in list(stitch_dict):
                 print(f'process {setups}')
                 stat_data = stitch_dict[setups]['stat']
@@ -285,13 +291,15 @@ if __name__ == '__main__':
                     phase_df.fillna(method="bfill", inplace=True)
                     phase_df.fillna(method="pad", inplace=True)
 
-                    phase = phase_df.to_numpy()
+                    phase = phase_df.to_numpy().flatten()
 
-                    respiration = compute_respiration(phase.flatten())
                     if phase_dir is None:
+                        respiration = compute_respiration(phase)
                         UP = 1
                         DOWN = 50
                         respiration = sp.resample_poly(respiration, UP, DOWN)
+                    else:
+                        respiration = phase
                     fs_new = 10
 
 

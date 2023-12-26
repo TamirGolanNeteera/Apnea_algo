@@ -37,16 +37,6 @@ def setup_end_time(setup, end_time):
     return datetime.fromisoformat(end_time).replace(tzinfo=pytz.UTC)
 
 
-def load_and_process_setup_data(setup, phase, ref_start_time):
-    delta = get_gap_in_frames(setup)
-    phase_data = np.load(phase)
-
-    # Cut along the reference start time
-    ref_delta = int(delta / 500)  # Convert frames to seconds
-    phase_data = phase_data[ref_delta:]
-
-    # Process the data as needed
-    # ...
 
 
 def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
@@ -63,6 +53,7 @@ def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
     setups_hr = {}
     final_data_dict = {}
     statuses = {}
+    fs = 500 if phase_dir is None else 10
 
 
     for setup in setups:
@@ -116,7 +107,7 @@ def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
                 phase_current = np.load(setups_phase[current_setup])
             stat_current = np.load(statuses[current_setup], allow_pickle=True)
             hr_current = np.load(setups_hr[current_setup], allow_pickle=True)
-            gap_frames = (current_start_time - prev_end_time).seconds * 500
+            gap_frames = (current_start_time - prev_end_time).seconds * fs
             gap_sec = (current_start_time - prev_end_time).seconds
             if gap_frames > 0:
                 gap_data = np.full(gap_frames, np.nan)
@@ -130,7 +121,7 @@ def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
                 hr_merged = np.concatenate((hr_merged, hr_current))
 
             # Load and process the merged data
-        gap_from_ref, ref_earlier = get_gap_in_frames(db, setups_list[0])
+        gap_from_ref, ref_earlier = get_gap_in_frames(db, setups_list[0], fs=fs)
         device_location = device_map[int(device_id) % 1000]
         final_data_dict[tuple(setups_list)] = {'phase': phase_merged, 'gap': gap_from_ref,
                                                'device_loc': device_location, 'ref_earlier' : ref_earlier, 'stat':staus_merged,
