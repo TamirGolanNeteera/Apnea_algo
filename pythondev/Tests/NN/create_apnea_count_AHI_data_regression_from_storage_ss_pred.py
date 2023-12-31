@@ -252,7 +252,7 @@ if __name__ == '__main__':
         #     if sess != 108171:
         #         continue
             phase_dir = None
-            phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/MB_new_orig_config'
+            phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/MB_old_and_new_model_3_281223_second/hr_rr_ra_ie_stat_intra_breath_28_12_2023/accumulated/'
             try:
                 stitch_dict = stitch_and_align_setups_of_session(sess, phase_dir=phase_dir)
             except:
