@@ -40,8 +40,11 @@ base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_ds_filter/scale
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config_test/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug_test/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config_test2/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_3/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug/scaled/'
-base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config/scaled/'
+base_path  = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2_chnage_valid/scaled'
+
 
 
 fn = 'ahi' + '.png'
@@ -206,6 +209,9 @@ if __name__ == '__main__':
     y_pred_2class = []
     res = {}
     sessions_processed = []
+    setups =  list(set([int(s)  for s in [fn[0:fn.find('_')] for fn in os.listdir('/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_3/scaled/')] if str.isdigit(s)]))
+    db.update_mysql_db(0)
+    # setups = db.setups_by_session(108148)
     for i_sess, sess in enumerate(setups):
         db.update_mysql_db(sess)
 
@@ -406,7 +412,7 @@ if __name__ == '__main__':
     plt.xlabel('Predicted')
     plt.ylabel('Actual')
     plt.title('4-class Confusion Matrix')
-    plt.savefig(os.path.join(base_path,"cm4.png"))
+    plt.savefig(os.path.join(base_path,"cm4_part.png"))
     # Show the plot
     plt.show()
     plt.close()
@@ -419,7 +425,7 @@ if __name__ == '__main__':
     plt.title('2-class Confusion Matrix :: sensitivity=' + str(np.round(sensitivity, 2)) + " :: specificity=" + str(
         np.round(specificity, 2)))
 
-    plt.savefig(os.path.join(base_path,"cm2.png"))
+    plt.savefig(os.path.join(base_path,"cm2_part.png"))
     plt.show()
     plt.close()
     device_map = {232: 1, 238: 1, 234: 1, 236: 1, 231: 1,
@@ -430,7 +436,7 @@ if __name__ == '__main__':
     plt.figure(figsize=(10,10))
 
 
-    for device in range(0,5):
+    for device in range(1,5):
         y_true_2class = []
         y_pred_2class = []
         plt.figure(figsize=(10, 10))
@@ -463,6 +469,8 @@ if __name__ == '__main__':
             plt.axvline(x=t, color='grey', linewidth=thick, alpha=thick)
         plt.xlabel("gt")
         plt.ylabel("pred")
+        if len(y_pred_2class) == 0:
+            continue
         cm2 = confusion_matrix(y_pred_2class, y_true_2class)
         TP = cm2[1][1]
         TN = cm2[0][0]
@@ -470,7 +478,7 @@ if __name__ == '__main__':
         FP = cm2[1][0]
         plt.title(f"MB2 AHI device {device} TP: {TP}/{(TP+FN)} ,TN: {TN}/{TN+FP}, TOTAL: {TP+TN}/{TP+TN+FN+FP}")
 
-        plt.savefig(os.path.join(base_path, f'scatter_device_{device}.png'))
+        plt.savefig(os.path.join(base_path, f'scatter_device_{device}_part.png'))
         plt.show()
         plt.close()
     print("y_pred", y_pred)

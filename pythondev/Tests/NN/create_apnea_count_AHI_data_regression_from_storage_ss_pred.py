@@ -103,12 +103,7 @@ def create_AHI_regression_training_data_MB_phase_with_sleep_ref(respiration, apn
         start_fs = int((i - time_chunk)/fs)
         end_fs = int(i/fs)
 
-        if (seg == -100).any():
-            v = 0
-            print(v, "-100")
-        if np.mean(seg) < 1e-4 and np.std(seg) < 1e-5:
-            v = 0
-            print(v, "mean")
+
         if len(seg) != time_chunk:
             continue
 
@@ -252,7 +247,8 @@ if __name__ == '__main__':
         #     if sess != 108171:
         #         continue
             phase_dir = None
-            phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/MB_new_orig_config'
+            phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/MB_old_and_new_model_2_311223/hr_rr_ra_ie_stat_intra_breath_31_12_2023/accumulated'
+            fs = 10 if phase_dir else 500
             try:
                 stitch_dict = stitch_and_align_setups_of_session(sess, phase_dir=phase_dir)
             except:
@@ -276,9 +272,9 @@ if __name__ == '__main__':
                 hr_ref = np.load(list(Path(db.setup_dir(setups[0])).parent.rglob('*HR*'))[0], allow_pickle=True)
                 if stitch_dict[setups]['ref_earlier']:
                     if not args.pred_sleep:
-                        ss_ref = ss_ref[stitch_dict[setups]['gap'] // 500:]
-                    apnea_ref = apnea_ref[stitch_dict[setups]['gap'] // 500:]
-                    sp02 = sp02[stitch_dict[setups]['gap'] // 500:]
+                        ss_ref = ss_ref[stitch_dict[setups]['gap'] // fs:]
+                    apnea_ref = apnea_ref[stitch_dict[setups]['gap'] // fs:]
+                    sp02 = sp02[stitch_dict[setups]['gap'] // fs:]
 
 
 
