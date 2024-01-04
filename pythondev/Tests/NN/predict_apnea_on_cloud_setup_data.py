@@ -264,7 +264,7 @@ if __name__ == '__main__':
         X_fn = [f for f in setup_files if str(sess) in f][0]
         y_fn = [f for f in label_files if str(sess) in f][0]
         v_fn = [f for f in valid_files if str(sess) in f][0]
-        # e_fn = [f for f in empty_files if str(sess) in f][0]
+        e_fn = [f for f in empty_files if str(sess) in f][0]
         a_fn = [f for f in apnea_files if str(sess) in f][0]
         s_fn = [f for f in ss_files if str(sess) in f][0]
         p_fn = [f for f in ss_pred_files if str(sess) in f][0]
@@ -275,7 +275,7 @@ if __name__ == '__main__':
             valid = np.load(os.path.join(base_path, v_fn), allow_pickle=True)
             ss = np.load(os.path.join(base_path, s_fn), allow_pickle=True)
             ss_pred = np.load(os.path.join(base_path, p_fn), allow_pickle=True)
-            # empty = np.load(os.path.join(base_path, e_fn), allow_pickle=True)
+            empty = np.load(os.path.join(base_path, e_fn), allow_pickle=True)
             apnea = np.load(os.path.join(base_path, a_fn), allow_pickle=True)
             # rank = np.load(os.path.join(base_path, r_fn), allow_pickle=True)
             print(len(X), len(y), len(valid), len(ss))#, len(empty))
@@ -329,7 +329,7 @@ if __name__ == '__main__':
         # pahi_from_y_valid = 4*num_apneas_from_y_valid / len_valid
         num_apneas_from_pred_valid = np.sum(preds[valid==1])
         pahi_from_pred_valid = num_apneas_from_pred_valid / (len_valid / 4)
-        pahi_by_ss_filter_empty = num_apneas_from_pred / (np.count_nonzero(np.logical_and(1 - ss_pred)) / 3600)
+        pahi_by_ss_filter_empty = num_apneas_from_pred / (np.count_nonzero(np.logical_and(1 - ss_pred, empty[:len(ss_pred)])) / 3600)
 
         print("#apneas", num_apneas_from_y, num_apneas_from_pred, pahi_from_y, pahi_from_pred)
         print("#apneas valid", num_apneas_from_pred_valid, pahi_from_pred_valid)
