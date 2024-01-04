@@ -355,6 +355,7 @@ if __name__ == '__main__':
         # pahi_from_y_valid = 4*num_apneas_from_y_valid / len_valid
         num_apneas_from_pred_valid = np.sum(preds[valid==1])
         pahi_from_pred_valid = num_apneas_from_pred_valid / (len_valid / 4)
+        pahi_by_ss = pahi_from_pred / (np.count_nonzero(ss) / 3600)
 
         print("#apneas", num_apneas_from_y, num_apneas_from_pred, pahi_from_y, pahi_from_pred)
         print("#apneas valid", num_apneas_from_pred_valid, pahi_from_pred_valid)
@@ -363,14 +364,15 @@ if __name__ == '__main__':
 
         print(valid)
         res_dict[session][sess] = {'device': db.setup_sn(sess)[0][-3:],
-        'pahi_from_y': pahi_from_y, 'pahi_from_pred': pahi_from_pred, 'pahi_from_pred_valid': pahi_from_pred_valid}
+        'pahi_from_y': pahi_from_y, 'pahi_from_pred': pahi_from_pred, 'pahi_from_pred_valid': pahi_from_pred_valid,
+                              'pahi_by_ss' : pahi_by_ss     }
         outfolder = base_path
 
 
         y_true.append(pahi_from_y)
-        y_pred.append(pahi_from_pred_valid)
+        y_pred.append(pahi_by_ss)
 
-        res[sess] = [pahi_from_y, pahi_from_pred_valid]
+        res[sess] = [pahi_from_y, pahi_by_ss]
         def ahi_class(ahi):
             if ahi < 5:
                 return 0
@@ -381,9 +383,9 @@ if __name__ == '__main__':
             return 3
 
         y_true_4class.append(ahi_class(pahi_from_y))#pahi_from_y_valid))
-        y_pred_4class.append(ahi_class(pahi_from_pred_valid))
+        y_pred_4class.append(ahi_class(pahi_by_ss))
         y_true_2class.append([0 if ahi_class(pahi_from_y) <= 1 else 1])
-        y_pred_2class.append([0 if ahi_class(pahi_from_pred_valid) <= 1 else 1])
+        y_pred_2class.append([0 if ahi_class(pahi_by_ss) <= 1 else 1])
 
 
     import seaborn as sns
@@ -453,11 +455,11 @@ if __name__ == '__main__':
                 try:
                     plt.xlim((0,60))
                     plt.ylim((0,60))
-                    plt.scatter(setup_data['pahi_from_y'], setup_data['pahi_from_pred_valid'], alpha=0.8, c=color_radar[device_loc], s=5)
+                    plt.scatter(setup_data['pahi_from_y'], setup_data['pahi_by_ss'], alpha=0.8, c=color_radar[device_loc], s=5)
                     y_true_2class.append([0 if ahi_class(setup_data['pahi_from_y']) <= 1 else 1])
-                    y_pred_2class.append([0 if ahi_class( setup_data['pahi_from_pred_valid']) <= 1 else 1])
+                    y_pred_2class.append([0 if ahi_class( setup_data['pahi_by_ss']) <= 1 else 1])
 
-                    plt.text(setup_data['pahi_from_y'], setup_data['pahi_from_pred_valid'], str(device_loc) + ' ' + str(session), fontsize=6, alpha=0.6, c=color_radar[device_loc])
+                    plt.text(setup_data['pahi_from_y'], setup_data['pahi_by_ss'], str(device_loc) + ' ' + str(session), fontsize=6, alpha=0.6, c=color_radar[device_loc])
                 except:
                     print(2)
         th = [5, 15, 30]
