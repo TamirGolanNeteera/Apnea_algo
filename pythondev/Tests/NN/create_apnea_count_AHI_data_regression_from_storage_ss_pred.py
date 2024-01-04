@@ -20,51 +20,6 @@ from Tests.NN.Chest.create_apnea_count_AHI_data_regression_MB_chest import apnea
 db = DB()
 session_ahi_pdf_dict = {108139: 1.2, 108145: 10.8, 108186: 56.6, 108168: 37.6, 108146: 0.8, 108147: 6.1, 108148: 29.2, 108153: 5.4, 108154: 3.8, 108152: 16.2, 108170: 2.7, 108171: 13.7, 108175: 0.4, 108207: 5.5, 108191: 9.6, 108192: 4.1, 108201: 13.6, 108223: 8.9, 108298: 23.1, 108222: 5.2, 108226: 1.9, 108299: 11.8, 108303: 1.2, 108331: 3.7, 108348: 15.8, 108335: 9.8, 108349: 48.2}
 
-def create_AHI_regression_training_data_from_annotation(respiration, apnea_ref, time_chunk, step, scale, fs):
-    X = []
-    y = []
-    valid = []
-    apnea_ref['start_t'] = fs*apnea_ref['onset']
-    apnea_ref['end_t'] = apnea_ref['start_t'] + apnea_ref['duration']*fs
-    for i in range(time_chunk, len(respiration), step):
-
-        v = 1
-        seg = respiration[i - time_chunk:i]
-        if (seg == -100).any():
-            v = 0
-        if np.mean(seg) < 1e-4 and np.std(seg) < 1e-5:
-            v = 0
-            #continue
-        if len(seg) != time_chunk:
-            continue
-        if scale:
-            X.append(preprocessing.scale(seg))
-        else:
-            X.append(seg)
-
-        #print(np.mean(seg), np.median(seg), np.std(seg))
-        #print(apneas_df.loc[(apneas_df['start_t'] >= (i - time_chunk)) & (apneas_df['end_t'] <i)])
-        num_apneas = len(apnea_ref.loc[(apnea_ref['start_t'] >= (i - time_chunk)) & (apnea_ref['end_t'] <i)])
-        #num_apneas = count_apneas_in_chunk(start_t=i - time_chunk, end_t=i, apnea_segments=apnea_segments)
-
-        y.append(num_apneas)
-
-        # plt.plot(preprocessing.robust_scale(seg))
-        # plt.title(str(num_apneas))
-        # plt.show()
-
-        valid.append(v)
-    if len(X):
-        print(y)
-        X = np.stack(X)
-        y = np.stack(y)
-
-        valid = np.stack(valid)
-        #print(np.count_nonzero(valid))
-        return X, y, valid
-
-    return X,y, valid
-
 
 def create_AHI_regression_training_data_MB_phase_with_sleep_ref(respiration, apnea_ref, sleep_ref, empty_ref, time_chunk, step, scale, fs):
     print("in")
@@ -166,42 +121,6 @@ def get_empty_seconds_mb(setup):
     return empty
 
 
-def load_apnea_ref_from_annotations(setup, db):
-    try:
-        s = db.session_from_setup(setup)
-        apnea = load_reference(setup, 'apnea', db)
-
-        if setup in delays.keys():
-            apnea = apnea[delays[setup]:]
-        if apnea is not None:
-            return apnea
-
-        data_setup = min(db.setups_by_session(s))
-        p = db.setup_dir(data_setup)
-        ref_dir = os.sep.join([p, 'REFERENCE/RESPIRONICS_ALICE6'])
-        #print(ref_dir)
-        #print(os.listdir(ref_dir))
-        apnea = None
-        for file in os.listdir(ref_dir):
-            #print(file)
-            if 'pnea.npy' in file:
-                #print(os.path.join(ref_dir, file))
-                anno_path = os.path.join(ref_dir, file)
-                #print(anno_path)
-                apnea = np.load(anno_path, allow_pickle=True)
-                print('loaded apnea, setup', setup)
-                break
-        if len(apnea) > 0:
-            #print(apnea.keys())
-            print('ok')
-            return apnea
-        else:
-            print(setup, "not ok, no ref")
-            return None
-    except:
-        print(setup, "not ok exception")
-        return None
-
 def get_args() -> argparse.Namespace:
  """ Argument parser
 
@@ -257,22 +176,22 @@ if __name__ == '__main__':
                 print(f'process {setups}')
                 stat_data = stitch_dict[setups]['stat']
                 if args.pred_sleep:
-                    try:
+                    ss_ref = None
+                    for setup in setups:
                         try:
-                            ss_ref = np.load(f'/Neteera/Work/homes/tamir.golan/API_plots/{setups[0]}.npy', allow_pickle=True)
-                        except:
-                            ss_ref = np.load(f'/Neteera/Work/homes/tamir.golan/API_plots/{setups[1]}.npy', allow_pickle=True)
-                    except:
-                        continue
-                else:
-                    ss_ref = np.load(list(Path(db.setup_dir(setups[0])).parent.rglob('*sleep*'))[0], allow_pickle=True)
+                            ss_pred = np.load(f'/Neteera/Work/homes/tamir.golan/API_plots/{setup}.npy',
+                                             allow_pickle=True)
+                            break
+                        except FileNotFoundError:
+                            pass
+
+                ss_ref = np.load(list(Path(db.setup_dir(setups[0])).parent.rglob('*sleep*'))[0], allow_pickle=True)
                 apnea_ref = np.load(list(Path(db.setup_dir(setups[0])).parent.rglob('*pnea*'))[0], allow_pickle=True)
                 sp02 = np.load(list(Path(db.setup_dir(setups[0])).parent.rglob('*SpO2*'))[0], allow_pickle=True)[::50]
                 print(sess, ' apneas ', str(len(ss_ref) > len(apnea_ref)))
                 hr_ref = np.load(list(Path(db.setup_dir(setups[0])).parent.rglob('*HR*'))[0], allow_pickle=True)
                 if stitch_dict[setups]['ref_earlier']:
-                    if not args.pred_sleep:
-                        ss_ref = ss_ref[stitch_dict[setups]['gap'] // fs:]
+                    ss_ref = ss_ref[stitch_dict[setups]['gap'] // fs:]
                     apnea_ref = apnea_ref[stitch_dict[setups]['gap'] // fs:]
                     sp02 = sp02[stitch_dict[setups]['gap'] // fs:]
 
@@ -332,14 +251,14 @@ if __name__ == '__main__':
 
                     print(np.unique(ss_ref_class))
 
-                    # empty_ref_class = np.zeros(len(empty_ref))
-                    # #print(np.unique(empty_ref))
-                    # full_statuses = ['FULL', 'MOTION', 'LOW_SIGNAL']
-                    # for i in range(len(empty_ref)):
-                    #     if empty_ref[i] == 'EMPTY':
-                    #         empty_ref_class[i] = 0
-                    #     else:
-                    #         empty_ref_class[i] = 1
+                    empty_ref_class = np.zeros(len(stat_data))
+                    #print(np.unique(empty_ref))
+                    full_statuses = ['FULL', 'MOTION', 'LOW_SIGNAL']
+                    for i in range(len(stat_data)):
+                        if stat_data[i] == 'EMPTY':
+                            empty_ref_class[i] = 0
+                        else:
+                            empty_ref_class[i] = 1
 
                     #respiration, fs_new, bins = getSetupRespirationCloudDB(sess)
 
@@ -355,7 +274,7 @@ if __name__ == '__main__':
                         X, y, valid,  = create_AHI_regression_training_data_MB_phase_with_sleep_ref(respiration=respiration,
                                                                                     apnea_ref=apnea_ref_class,
                                                                                     sleep_ref=ss_ref_class,
-                                                                                    empty_ref=None,
+                                                                                    empty_ref=empty_ref_class,
                                                                                     time_chunk=time_chunk,
                                                                                     step=step,
                                                                                     scale=args.scale,
@@ -370,7 +289,9 @@ if __name__ == '__main__':
                     np.save(os.path.join(save_path,str(setup) + '_y.npy'), y, allow_pickle=True)
                     np.save(os.path.join(save_path,str(setup) + '_X.npy'), X, allow_pickle=True)
                     np.save(os.path.join(save_path, str(setup) + '_valid.npy'), valid, allow_pickle=True)
-                    # np.save(os.path.join(save_path, str(setup) + '_empty_ref_class.npy'), empty_ref_class, allow_pickle=True)
+                    np.save(os.path.join(save_path, str(setup) + '_empty_ref_class.npy'), empty_ref_class, allow_pickle=True)
                     np.save(os.path.join(save_path, str(setup) + '_ss_ref_class.npy'), ss_ref_class, allow_pickle=True)
+                    if args.pred_sleep:
+                        np.save(os.path.join(save_path, str(setup) + '_ss_pred_class.npy'), ss_pred, allow_pickle=True)
                     np.save(os.path.join(save_path, str(setup) + '_apnea_ref_class.npy'), apnea_ref_class, allow_pickle=True)
                 print("saved training data")

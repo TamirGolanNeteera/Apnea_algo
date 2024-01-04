@@ -44,6 +44,8 @@ base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_3/scaled/
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug/scaled/'
 base_path  = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2_chnage_valid/scaled'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2_with_SW_model_filter_empty/scaled'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2_with_SW_model/scaled'
 
 
 
@@ -184,6 +186,7 @@ if __name__ == '__main__':
         label_files = fnmatch.filter(os.listdir(base_path),'*_y.npy')
         valid_files = fnmatch.filter(os.listdir(base_path),'*_valid.npy')
         ss_files = fnmatch.filter(os.listdir(base_path),'*_ss_ref*.npy')
+        ss_pred_files = fnmatch.filter(os.listdir(base_path),'*_ss_pred*.npy')
         empty_files = fnmatch.filter(os.listdir(base_path),'*_empty*.npy')
         apnea_files = fnmatch.filter(os.listdir(base_path),'*_apnea*.npy')
         rank_files = fnmatch.filter(os.listdir(base_path),'*_radar_rank*.npy')
@@ -264,12 +267,14 @@ if __name__ == '__main__':
         # e_fn = [f for f in empty_files if str(sess) in f][0]
         a_fn = [f for f in apnea_files if str(sess) in f][0]
         s_fn = [f for f in ss_files if str(sess) in f][0]
+        p_fn = [f for f in ss_pred_files if str(sess) in f][0]
      ##   r_fn = [f for f in rank_files if str(session) in f][0]
         try:
             X = np.load(os.path.join(base_path, X_fn), allow_pickle=True)
             y = np.load(os.path.join(base_path, y_fn), allow_pickle=True)
             valid = np.load(os.path.join(base_path, v_fn), allow_pickle=True)
             ss = np.load(os.path.join(base_path, s_fn), allow_pickle=True)
+            ss_pred = np.load(os.path.join(base_path, p_fn), allow_pickle=True)
             # empty = np.load(os.path.join(base_path, e_fn), allow_pickle=True)
             apnea = np.load(os.path.join(base_path, a_fn), allow_pickle=True)
             # rank = np.load(os.path.join(base_path, r_fn), allow_pickle=True)
@@ -289,41 +294,10 @@ if __name__ == '__main__':
         #print(np.round(preds.flatten()[valid == 1]))
         pi=0
         time_chunk = 1200
-        # for i in range(time_chunk, len(respiration), time_chunk):
-        #     if pi > len(preds)-1:
-        #         break
-        #     pred = preds[pi][0]
-        #     ax[1].axvspan(i-time_chunk, i,color='green', alpha=0.6*valid[pi])
-        #     ax[0].axvspan(i-time_chunk, i,color='red', alpha=pred/30)
-        #
-        #     pi += 1
 
-        # for i in range(len(preds)):
-        #     label = y[i]
-        #     pred = preds[i][0]
-        #     print(i,label, pred, valid[i])
-        #     ax[1].scatter(label, pred, s=3, color='green', alpha=1 if valid[i] else 0.3)
-        # ax[0].plot(y, linewidth=0.75)
-        # ax[0].plot(preds, linewidth=0.75)
         yy =[y[j] if valid[j] else 0 for j in range(len(y))]
         pp =[preds[j] if valid[j] else 0 for j in range(len(preds))]
 
-        # ax[1].plot(yy, linewidth=0.75)
-        # ax[1].plot(pp, linewidth=0.75)
-        # ax[1].axhline(y=5, color='red', linewidth=0.5)
-        # ax[1].axhline(y=10, color='red', linewidth=0.5)
-        # ax[1].axhline(y=15, color='red', linewidth=0.5)
-        # ax[0].axhline(y=5, color='red', linewidth=0.5)
-        # ax[0].axhline(y=10, color='red', linewidth=0.5)
-        # ax[0].axhline(y=15, color='red', linewidth=0.5)
-        # ax[2].plot(respiration, linewidth=0.5)
-        # ss = np.repeat(ss, fs_new)
-        # apnea = np.array(apnea) * np.max(respiration)
-        # apnea = np.repeat(apnea, fs_new)
-        # empty = np.repeat(empty, fs_new)
-        #        ax[3].plot(empty, c='red', alpha=0.5, linewidth=0.5)
-        # ax[3].plot(ss, c='blue', alpha=0.5, linewidth=0.5)
-        # ax[2].plot(apnea, c='blue', alpha=0.5, linewidth=0.5)
 
         device_id = db.setup_sn(sess)[0]
         device_location = device_map[int(device_id) % 1000]
@@ -355,7 +329,7 @@ if __name__ == '__main__':
         # pahi_from_y_valid = 4*num_apneas_from_y_valid / len_valid
         num_apneas_from_pred_valid = np.sum(preds[valid==1])
         pahi_from_pred_valid = num_apneas_from_pred_valid / (len_valid / 4)
-        pahi_by_ss = num_apneas_from_pred / (np.count_nonzero(ss) / 3600)
+        pahi_by_ss_filter_empty = num_apneas_from_pred / (np.count_nonzero(np.logical_and(1 - ss_pred)) / 3600)
 
         print("#apneas", num_apneas_from_y, num_apneas_from_pred, pahi_from_y, pahi_from_pred)
         print("#apneas valid", num_apneas_from_pred_valid, pahi_from_pred_valid)
@@ -365,14 +339,14 @@ if __name__ == '__main__':
         print(valid)
         res_dict[session][sess] = {'device': db.setup_sn(sess)[0][-3:],
         'pahi_from_y': pahi_from_y, 'pahi_from_pred': pahi_from_pred, 'pahi_from_pred_valid': pahi_from_pred_valid,
-                              'pahi_by_ss' : pahi_by_ss     }
+                              'pahi_by_ss' : pahi_by_ss_filter_empty}
         outfolder = base_path
 
 
         y_true.append(pahi_from_y)
-        y_pred.append(pahi_by_ss)
+        y_pred.append(pahi_by_ss_filter_empty)
 
-        res[sess] = [pahi_from_y, pahi_by_ss]
+        res[sess] = [pahi_from_y, pahi_by_ss_filter_empty]
         def ahi_class(ahi):
             if ahi < 5:
                 return 0
@@ -383,9 +357,9 @@ if __name__ == '__main__':
             return 3
 
         y_true_4class.append(ahi_class(pahi_from_y))#pahi_from_y_valid))
-        y_pred_4class.append(ahi_class(pahi_by_ss))
+        y_pred_4class.append(ahi_class(pahi_by_ss_filter_empty))
         y_true_2class.append([0 if ahi_class(pahi_from_y) <= 1 else 1])
-        y_pred_2class.append([0 if ahi_class(pahi_by_ss) <= 1 else 1])
+        y_pred_2class.append([0 if ahi_class(pahi_by_ss_filter_empty) <= 1 else 1])
 
 
     import seaborn as sns
