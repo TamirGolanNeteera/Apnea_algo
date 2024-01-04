@@ -41,9 +41,9 @@ base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config_tes
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug_test/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config_test2/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_3/scaled/'
-base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug/scaled/'
 base_path  = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2_chnage_valid/scaled'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2/scaled/'
 
 
 
@@ -213,6 +213,8 @@ if __name__ == '__main__':
     db.update_mysql_db(0)
     # setups = db.setups_by_session(108148)
     for i_sess, sess in enumerate(setups):
+        # if db.session_from_setup(sess) != 108370:
+        #     continue
         db.update_mysql_db(sess)
 
         session = db.session_from_setup(sess)
@@ -347,7 +349,7 @@ if __name__ == '__main__':
         # yair_ahi_dict[session] = yair_ahi
         dana_ahi_dict[session] = pahi_from_y
         session_ahi_pdf_dict = {108139: 1.2, 108145: 10.8, 108186: 56.6, 108168: 37.6, 108146: 0.8, 108147: 6.1, 108148: 29.2, 108153: 5.4, 108154: 3.8, 108152: 16.2, 108170: 2.7, 108171: 13.7, 108175: 0.4, 108207: 5.5, 108191: 9.6, 108192: 4.1, 108201: 13.6, 108223: 8.9, 108298: 23.1, 108222: 5.2, 108226: 1.9, 108299: 11.8, 108303: 1.2, 108331: 3.7, 108348: 15.8, 108335: 9.8, 108349: 48.2}
-        num_apneas_from_pred = 5 * np.sum(preds)
+        num_apneas_from_pred = np.sum(preds)
         pahi_from_pred = 4*num_apneas_from_pred/len(preds)
 
         len_valid = len(valid[valid == 1])
