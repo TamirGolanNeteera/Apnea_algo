@@ -329,7 +329,7 @@ if __name__ == '__main__':
         # pahi_from_y_valid = 4*num_apneas_from_y_valid / len_valid
         num_apneas_from_pred_valid = np.sum(preds[valid==1])
         pahi_from_pred_valid = num_apneas_from_pred_valid / (len_valid / 4)
-        pahi_by_ss_filter_empty = num_apneas_from_pred / (np.count_nonzero(np.logical_and(1 - ss_pred)) / 3600)
+        pahi_by_ss_filter_empty = num_apneas_from_pred / (np.count_nonzero(1 - ss_pred) / 3600)
 
         print("#apneas", num_apneas_from_y, num_apneas_from_pred, pahi_from_y, pahi_from_pred)
         print("#apneas valid", num_apneas_from_pred_valid, pahi_from_pred_valid)
