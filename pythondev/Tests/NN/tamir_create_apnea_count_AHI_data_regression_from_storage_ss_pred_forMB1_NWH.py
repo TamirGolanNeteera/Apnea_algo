@@ -1,6 +1,11 @@
 # Copyright (c) 2021 Neteera Technologies Ltd. - Confidential
 import os
 import sys
+from pathlib import Path
+
+from Tests.NN.count_sleep_time import Raligh_setups
+from Tests.NN.tamir_setups_stitcher import stitch_and_align_setups_of_session
+
 sys.path.insert(1, os.getcwd())
 # from Tests.Plots.PlotRawDataRadarCPX import*
 import argparse
@@ -14,6 +19,7 @@ from Tests.NN.create_apnea_count_AHI_data import delays, MB_HQ, count_apneas_in_
 from Tests.NN.Chest.create_apnea_count_AHI_data_regression_MB_chest import apnea_class
 
 db = DB()
+session_ahi_pdf_dict = {108139: 1.2, 108145: 10.8, 108186: 56.6, 108168: 37.6, 108146: 0.8, 108147: 6.1, 108148: 29.2, 108153: 5.4, 108154: 3.8, 108152: 16.2, 108170: 2.7, 108171: 13.7, 108175: 0.4, 108207: 5.5, 108191: 9.6, 108192: 4.1, 108201: 13.6, 108223: 8.9, 108298: 23.1, 108222: 5.2, 108226: 1.9, 108299: 11.8, 108303: 1.2, 108331: 3.7, 108348: 15.8, 108335: 9.8, 108349: 48.2}
 
 def create_AHI_regression_training_data_from_annotation(respiration, apnea_ref, time_chunk, step, scale, fs):
     X = []
@@ -98,12 +104,7 @@ def create_AHI_regression_training_data_MB_phase_with_sleep_ref(respiration, apn
         start_fs = int((i - time_chunk)/fs)
         end_fs = int(i/fs)
 
-        if (seg == -100).any():
-            v = 0
-            print(v, "-100")
-        if np.mean(seg) < 1e-4 and np.std(seg) < 1e-5:
-            v = 0
-            print(v, "mean")
+
         if len(seg) != time_chunk:
             continue
 
@@ -130,7 +131,6 @@ def create_AHI_regression_training_data_MB_phase_with_sleep_ref(respiration, apn
             X.append(preprocessing.scale(seg))
         else:
             X.append(seg)
-
 
         num_apneas = 0 if apnea_ref is None else count_apneas_in_chunk(start_t=start_fs, end_t=end_fs, apnea_segments=apnea_segments)
 
@@ -215,6 +215,7 @@ def get_args() -> argparse.Namespace:
  parser.add_argument('--scale', action='store_true', help='Scale data to m=0 s=1')
  parser.add_argument('--show', action='store_true', help='Scale data to m=0 s=1')
  parser.add_argument('--overwrite', action='store_true',  required=False, help='Overwrite existing output')
+ parser.add_argument('--pred_sleep', action='store_true',  required=False, help='calc sleep stages by NN predictions and not gt')
  parser.add_argument('--filter_empty', action='store_true',  required=False, help='Filter empty from input')
  parser.add_argument('-chunk', metavar='window', type=int, required=True, help='signal size')
  parser.add_argument('-step', metavar='window', type=int, required=True, help='stride for signal creation')
@@ -236,144 +237,140 @@ if __name__ == '__main__':
 
     col = ['gray', 'blue', 'green', 'red', 'yellow', 'magenta', 'cyan']
 
-    setup_data_files = fnmatch.filter(os.listdir(args.load_path), '*phase.npy')
-    setups = []
-    for s in setup_data_files:
-        setups.append(s[:s.find('_')])
-    setups = np.stack(setups)
-
     db = DB('neteera_cloud_mirror')
+    setups = Raligh_setups
+    phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/final_for_train_and_test/NWH+MB1'
 
-    print(setups)
+    # phase_dir = '/Neteera/Work/homes/tamir.golan/Apnea_train/001_MB/scaled/'
+    #
+    phase_files = list(Path(phase_dir).rglob('*RR*'))
+    setups = sorted([int(filename.name[:filename.name.find('_')]) for filename in phase_files])
+    sessions = list(set(
+        [db.session_from_setup(setup) for setup in setups])) # if setup < 112000 and setup != 112241 and setup != 112242]))
 
 
-    for i_sess, setup_file in enumerate(setup_data_files):
-        try:
+    for i_sess, sess in enumerate(setups):
+        db.update_mysql_db(sess)
+
+        # try:
+        #     if sess != 108171:
+        #         continue
+        #     phase_dir = None
+        #     phase_dir = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug/hr_rr_ra_ie_stat_intra_breath_28_01_2024/accumulated'
+        fs = 10 if phase_dir else 500
+        phase = np.concatenate(pd.read_pickle(list(Path(phase_dir).rglob(f'*{sess}_RR_phase*'))[0]).to_numpy())
+        print(f'process {sess}')
+        if args.pred_sleep:
             try:
-                phase = np.load(os.path.join(args.load_path, setup_file), allow_pickle=True)
+                ss_ref = np.load(f'/Neteera/Work/homes/tamir.golan/API_plots/{sess}.npy', allow_pickle=True)
             except:
-                phase = np.concatenate(pd.read_pickle(os.path.join(args.load_path, setup_file)).to_numpy())
-
-            setup = int(setup_file[:setup_file.find('_')])
-            db.update_mysql_db(setup)
-            session = db.session_from_setup(setup)
-
-            print(setup)
-            phase_df = pd.DataFrame(phase)
-
-            phase_df.interpolate(method="linear", inplace=True)
-            phase_df.fillna(method="bfill", inplace=True)
-            phase_df.fillna(method="pad", inplace=True)
-
-            phase = phase_df.to_numpy()
-
-            respiration = phase
-
-            # respiration = compute_respiration(phase.flatten())
-            #
-            # UP = 1
-            # DOWN = 50
-            # respiration = sp.resample_poly(respiration, UP, DOWN)
-            # fs_new = 10
-
-            ref_file = setup_file[:setup_file.find('_')]+'_apnea_ref.npy'
-            ss_ref_file = setup_file[:setup_file.find('_')]+'_sleep_ref.npy'
-            empty_ref_file = setup_file[:setup_file.find('_')]+'_empty_ref.npy'
-
-            try:
-                apnea_ref = np.load(os.path.join(args.load_path, ref_file), allow_pickle=True)
-                ss_ref = np.load(os.path.join(args.load_path, ss_ref_file), allow_pickle=True)
-                empty_ref = np.load(os.path.join(args.load_path, empty_ref_file), allow_pickle=True)
-            except:
-                apnea_ref = np.load(db.setup_ref_path_npy(setup, sensor=Sensor.respironics_alice6 if setup>10000 else Sensor.natus, vs=VS.apnea), allow_pickle=True)
-                ss_ref = np.load(db.setup_ref_path_npy(setup, sensor=Sensor.respironics_alice6 if setup>10000 else Sensor.natus, vs=VS.sleep_stages), allow_pickle=True)
-                if isinstance(apnea_ref, pd.Series):
-                    apnea_ref.fillna('normal', inplace=True)
-                    ss_ref.fillna('W', inplace=True)
-                try:
-                    empty_ref = np.load(db.setup_ref_path_npy(setup, sensor=Sensor.respironics_alice6 if setup>10000 else Sensor.nes, vs=VS.stat), allow_pickle=True)
-                except:
-                    empty_ref = np.zeros(len(ss_ref))
-
-            session = db.session_from_setup(setup)
-            print(len(phase)/500, len(apnea_ref), len(ss_ref), np.unique(apnea_ref))
-
-
-            print(":::::::: processing session", setup)
-            if args.overwrite and os.path.isfile(os.path.join(save_path,str(setup) + '_X.npy')):
-                print(setup, "done, skipping")
                 continue
+        else:
+            ss_ref = load_reference(sess, 'sleep_stages', db)
+        if isinstance(ss_ref, pd.Series):
+            ss_ref = ss_ref.fillna('W')
+        apnea_ref = load_reference(sess, 'apnea', db)
+        if isinstance(apnea_ref, pd.Series):
+            apnea_ref = apnea_ref.fillna('normal')
+        sp02 = np.load(list(Path(db.setup_dir(sess)).parent.rglob('*SpO2*'))[0], allow_pickle=True)[::50]
+        print(sess, ' apneas ', str(len(ss_ref) > len(apnea_ref)))
+        hr_ref = np.load(list(Path(db.setup_dir(sess)).parent.rglob('*HR*'))[0], allow_pickle=True)
 
-            print(np.unique(apnea_ref))
-            apnea_ref_class = np.zeros(len(apnea_ref))
 
-            for i in range(len(apnea_ref)):
-                #print(i, apnea_ref[i], apnea_ref[i] in apnea_class.keys())
-                if apnea_ref[i] not in apnea_class.keys():
-                    apnea_ref_class[i] = -1
-                else:
-                    apnea_ref_class[i] = int(apnea_class[apnea_ref[i]])
 
-            print(np.unique(apnea_ref_class))
+        phase_df = pd.DataFrame(phase)
 
-            print(np.unique(ss_ref))
-            ss_ref_class = np.zeros(len(ss_ref))
-            ss_class = {'N1':1, 'N2':1, 'N3':1, 'W':0, 'R':1, None: 0}
-            for i in range(len(ss_ref)):
-                # print(i, ss_ref[i], ss_ref[i] in ss_class.keys())
-                if ss_ref[i] not in ss_class.keys():
-                    ss_ref_class[i] = -1
-                else:
-                    ss_ref_class[i] = int(ss_class[ss_ref[i]])
+        phase_df.interpolate(method="linear", inplace=True)
+        phase_df.fillna(method="bfill", inplace=True)
+        phase_df.fillna(method="pad", inplace=True)
 
-            print(np.unique(ss_ref_class))
+        phase = phase_df.to_numpy().flatten()
 
-            empty_ref_class = np.zeros(len(empty_ref))
-            #print(np.unique(empty_ref))
-            full_statuses = ['FULL', 'MOTION', 'LOW_SIGNAL']
-            for i in range(len(empty_ref)):
-                if empty_ref[i] == 'EMPTY':
-                    empty_ref_class[i] = 0
-                else:
-                    empty_ref_class[i] = 1
-
-            #respiration, fs_new, bins = getSetupRespirationCloudDB(sess)
-            # respiration = compute_respiration(phase.flatten())
+        if phase_dir is None:
+            respiration = compute_respiration(phase)
             UP = 1
             DOWN = 50
-            # respiration = sp.resample_poly(respiration, UP, DOWN)
-            fs_new = int((500 * UP) / DOWN)
+            respiration = sp.resample_poly(respiration, UP, DOWN)
+        else:
+            respiration = phase
+            fs_new = 10
 
-            # min_setup_length = 15000
-            # if len(respiration)/fs_new < min_setup_length:
-            #     continue
 
-            chunk_size_in_minutes = args.chunk
-            time_chunk = fs_new * chunk_size_in_minutes * 60
-            step = fs_new * args.step * 60
 
-            try:
-                X, y, valid,  = create_AHI_regression_training_data_MB_phase_with_sleep_ref(respiration=respiration,
-                                                                            apnea_ref=apnea_ref_class,
-                                                                            sleep_ref=ss_ref_class,
-                                                                            empty_ref=empty_ref_class,
-                                                                            time_chunk=time_chunk,
-                                                                            step=step,
-                                                                            scale=args.scale,
-                                                                            fs=fs_new)
-                print("np.unique(y)",np.unique(y), setup, db.session_from_setup(setup))
-                print(y)
-            except:
-                print("oh crap")
-        except(OSError):
-            print(setup, "not ok 2")
-            #continue
+        print(len(phase)/500, len(apnea_ref), len(ss_ref), np.unique(apnea_ref))
+
+
+        print(":::::::: processing setup", sess)
+        if not args.overwrite and os.path.isfile(os.path.join(save_path,str(sess) + '_X.npy')):
+                print(sess, "done, skipping")
+                continue
+
+        print(np.unique(apnea_ref))
+        apnea_ref_class = np.zeros(len(apnea_ref))
+
+        for i in range(len(apnea_ref)):
+            #print(i, apnea_ref[i], apnea_ref[i] in apnea_class.keys())
+            if apnea_ref[i] not in apnea_class.keys():
+                apnea_ref_class[i] = -1
+            else:
+                apnea_ref_class[i] = int(apnea_class[apnea_ref[i]])
+
+        print(np.unique(apnea_ref_class))
+        if isinstance(ss_ref, pd.Series):
+            ss_ref = ss_ref.fillna('W')
+            ss_ref = ss_ref.to_numpy()
+        print(np.unique(ss_ref))
+        ss_ref_class = np.zeros(len(ss_ref))
+        ss_class = {'N1':1, 'N2':1, 'N3':1, 'W':0, 'R':1}
+        for i in range(len(ss_ref)):
+            # print(i, ss_ref[i], ss_ref[i] in ss_class.keys())
+            if ss_ref[i] not in ss_class.keys():
+                ss_ref_class[i] = -1
+            else:
+                ss_ref_class[i] = int(ss_class[ss_ref[i]])
+
+        print(np.unique(ss_ref_class))
+        setup = sess
+
+                # empty_ref_class = np.zeros(len(empty_ref))
+                # #print(np.unique(empty_ref))
+                # full_statuses = ['FULL', 'MOTION', 'LOW_SIGNAL']
+                # for i in range(len(empty_ref)):
+                #     if empty_ref[i] == 'EMPTY':
+                #         empty_ref_class[i] = 0
+                #     else:
+                #         empty_ref_class[i] = 1
+
+                #respiration, fs_new, bins = getSetupRespirationCloudDB(sess)
+
+                # min_setup_length = 15000
+                # if len(respiration)/fs_new < min_setup_length:
+                #     continue
+
+        chunk_size_in_minutes = args.chunk
+        time_chunk = fs_new * chunk_size_in_minutes * 60
+        step = fs_new * args.step * 60
+
+        try:
+            X, y, valid,  = create_AHI_regression_training_data_MB_phase_with_sleep_ref(respiration=respiration,
+                                                                        apnea_ref=apnea_ref_class,
+                                                                        sleep_ref=ss_ref_class,
+                                                                        empty_ref=None,
+                                                                        time_chunk=time_chunk,
+                                                                        step=step,
+                                                                        scale=args.scale,
+                                                                        fs=fs_new)
+            print("np.unique(y)",np.unique(y), setup, db.session_from_setup(setup))
+            print(y)
+        except:
+            print("oh crap")
+        #continue
         print(X.shape, y.shape)
         print("successfully created AHI labels")
         np.save(os.path.join(save_path,str(setup) + '_y.npy'), y, allow_pickle=True)
         np.save(os.path.join(save_path,str(setup) + '_X.npy'), X, allow_pickle=True)
         np.save(os.path.join(save_path, str(setup) + '_valid.npy'), valid, allow_pickle=True)
-        np.save(os.path.join(save_path, str(setup) + '_empty_ref_class.npy'), empty_ref_class, allow_pickle=True)
+        # np.save(os.path.join(save_path, str(setup) + '_empty_ref_class.npy'), empty_ref_class, allow_pickle=True)
         np.save(os.path.join(save_path, str(setup) + '_ss_ref_class.npy'), ss_ref_class, allow_pickle=True)
         np.save(os.path.join(save_path, str(setup) + '_apnea_ref_class.npy'), apnea_ref_class, allow_pickle=True)
-        print("saved training data")
+    print("saved training data")

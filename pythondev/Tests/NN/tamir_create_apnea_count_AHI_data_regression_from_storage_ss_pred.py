@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+from Tests.NN.count_sleep_time import Raligh_setups
 from Tests.NN.tamir_setups_stitcher import stitch_and_align_setups_of_session
 
 sys.path.insert(1, os.getcwd())
@@ -237,20 +238,27 @@ if __name__ == '__main__':
     col = ['gray', 'blue', 'green', 'red', 'yellow', 'magenta', 'cyan']
 
     db = DB('neteera_cloud_mirror')
-    setups = db.setup_by_sensor(Sensor.respironics_alice6)
+    setups = Raligh_setups
+    phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/final_for_train_and_test/Raligh_only'
+
+    # phase_dir = '/Neteera/Work/homes/tamir.golan/Apnea_train/001_MB/scaled/'
+    #
+    phase_files = list(Path(phase_dir).rglob('*RR*'))
+    setups = [int(filename.name[:filename.name.find('_')]) for filename in phase_files]
     sessions = list(set(
-        [db.session_from_setup(setup) for setup in setups if setup > 112000 and setup != 112241 and setup != 112242]))
+        [db.session_from_setup(setup) for setup in setups])) # if setup < 112000 and setup != 112241 and setup != 112242]))
 
 
     for i_sess, sess in enumerate(sessions):
+
         # try:
         #     if sess != 108171:
         #         continue
-            phase_dir = None
-            phase_dir = '/Neteera/Work/homes/tamir.golan/embedded_phase/MB_old_and_new_model_2_311223/hr_rr_ra_ie_stat_intra_breath_31_12_2023/accumulated'
+        #     phase_dir = None
+        #     phase_dir = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug/hr_rr_ra_ie_stat_intra_breath_28_01_2024/accumulated'
             fs = 10 if phase_dir else 500
             try:
-                stitch_dict = stitch_and_align_setups_of_session(sess, phase_dir=phase_dir)
+                stitch_dict = stitch_and_align_setups_of_session(sess, phase_dir=phase_dir, skip_2=True)
             except:
                 continue
             for setups in list(stitch_dict):
@@ -261,7 +269,10 @@ if __name__ == '__main__':
                         try:
                             ss_ref = np.load(f'/Neteera/Work/homes/tamir.golan/API_plots/{setups[0]}.npy', allow_pickle=True)
                         except:
-                            ss_ref = np.load(f'/Neteera/Work/homes/tamir.golan/API_plots/{setups[1]}.npy', allow_pickle=True)
+                            try:
+                                ss_ref = np.load(f'/Neteera/Work/homes/tamir.golan/API_plots/{setups[1]}.npy', allow_pickle=True)
+                            except:
+                                ss_ref = np.load(f'/Neteera/Work/homes/tamir.golan/API_plots/{setups[2]}.npy', allow_pickle=True)
                     except:
                         continue
                 else:
@@ -273,6 +284,8 @@ if __name__ == '__main__':
                 if stitch_dict[setups]['ref_earlier']:
                     if not args.pred_sleep:
                         ss_ref = ss_ref[stitch_dict[setups]['gap'] // fs:]
+                    else:
+                        ss_ref = 1 - ss_ref
                     apnea_ref = apnea_ref[stitch_dict[setups]['gap'] // fs:]
                     sp02 = sp02[stitch_dict[setups]['gap'] // fs:]
 
@@ -304,7 +317,7 @@ if __name__ == '__main__':
 
 
                     print(":::::::: processing setup", setup)
-                    if args.overwrite and os.path.isfile(os.path.join(save_path,str(setup) + '_X.npy')):
+                    if not args.overwrite and os.path.isfile(os.path.join(save_path,str(setup) + '_X.npy')):
                         print(setup, "done, skipping")
                         continue
 
@@ -321,14 +334,17 @@ if __name__ == '__main__':
                     print(np.unique(apnea_ref_class))
 
                     print(np.unique(ss_ref))
-                    ss_ref_class = np.zeros(len(ss_ref))
-                    ss_class = {'N1':1, 'N2':1, 'N3':1, 'W':0, 'R':1}
-                    for i in range(len(ss_ref)):
-                        # print(i, ss_ref[i], ss_ref[i] in ss_class.keys())
-                        if ss_ref[i] not in ss_class.keys():
-                            ss_ref_class[i] = -1
-                        else:
-                            ss_ref_class[i] = int(ss_class[ss_ref[i]])
+                    if args.pred_sleep:
+                        ss_ref_class = ss_ref
+                    else:
+                        ss_ref_class = np.zeros(len(ss_ref))
+                        ss_class = {'N1':1, 'N2':1, 'N3':1, 'W':0, 'R':1}
+                        for i in range(len(ss_ref)):
+                            # print(i, ss_ref[i], ss_ref[i] in ss_class.keys())
+                            if ss_ref[i] not in ss_class.keys():
+                                ss_ref_class[i] = -1
+                            else:
+                                ss_ref_class[i] = int(ss_class[ss_ref[i]])
 
                     print(np.unique(ss_ref_class))
 

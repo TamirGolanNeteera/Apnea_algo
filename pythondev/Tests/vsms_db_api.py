@@ -141,6 +141,8 @@ class Sensor(NamedEnum):
     liegehp = 'liegehp'
     spirometer = 'spirometer'
     respironics_alice6 = 'respironics_alice6'
+    edf_szmc_sl = 'edf_szmc_sl'
+
 
 
 class VS(NamedEnum):
@@ -2452,37 +2454,56 @@ class DB:
             Optional[Dict[str, Optional[datetime.datetime]]]:
         """ return starting/ending ts for a given setup id and sensor name
 
-                :param int setup: setup id
-                :param Sensor sensor: Sensor name
-                :param str search: Sensor file name to search
-                :return: starting/ending timestamp
-                :rtype: dict
-                """
-        sch_str = ref_str = ''
-        if search:
-            sch_str = """ AND data.fpath LIKE '%{sch}%'""".format(sch=search)
+        :param int setup: setup id
+        :param Sensor sensor: Sensor name
+        :param str search: Sensor file name to search
+        :return: starting/ending timestamp
+        :rtype: dict
+        """
+
+        if self.mysql_db == 'neteera_cloud_mirror':
+            if sensor == Sensor.nes:
+                query = "SELECT DISTINCT d.start_time, d.end_time " \
+                        "FROM data d, sensor s " \
+                        f"WHERE d.fk_sensor_id = s.sensor_id " \
+                        f"AND d.fk_setup_id = {setup} " \
+                        f"AND s.name = '{sensor}'"
+                start, end = self._execute_and_fetch(query, 2)
+            else:
+                query = "SELECT DISTINCT d.start_time, d.end_time " \
+                        "FROM data d, sensor sn, setup st " \
+                        f"WHERE d.fk_sensor_id = sn.sensor_id " \
+                        f"AND d.fk_session_id = st.fk_session_id " \
+                        f"AND st.setup_id = {setup} " \
+                        f"AND sn.name = '{sensor}'"
+                start, end = self._execute_and_fetch(query, 2)
+
         else:
-            if sensor == Sensor.nes and self.mysql_db == 'neteera_db':
-                ref_str = """ AND (LENGTH(data.fpath)-LENGTH(REPLACE(data.fpath,'.','')))/LENGTH('.') = 1 AND 
-                ((substring_index(data.fpath, '.', -1) = 'ttlog') OR 
-                (substring_index(data.fpath, '.', -1) = 'tlog') OR 
-                (substring_index(data.fpath, '.', -1) = 'blog'))"""
+            sch_str = ref_str = ''
+            if search:
+                sch_str = """ AND data.fpath LIKE '%{sch}%'""".format(sch=search)
+            if sensor == Sensor.nes:
+                ref_str = """ AND (LENGTH(data.fpath)-LENGTH(REPLACE(data.fpath,'.','')))/LENGTH('.') = 1 AND
+                   ((substring_index(data.fpath, '.', -1) = 'ttlog') OR
+                   (substring_index(data.fpath, '.', -1) = 'tlog') OR
+                   (substring_index(data.fpath, '.', -1) = 'blog'))"""
             elif sensor == Sensor.epm_10m:
                 ref_str = """ AND data.fpath LIKE '%ParameterData%'"""
             elif sensor == Sensor.natus:
                 ref_str = """ AND data.fpath LIKE '%.edf%'"""
-        query = f"""
-        SELECT data.start_time, data.end_time
-        FROM data, sensor
-         WHERE data.fk_setup_id = {setup}
-         AND data.fk_sensor_uuid = sensor.sensor_uuid
-         AND sensor.name = '{sensor}' {sch_str} {ref_str}
-         AND data.start_time IS NOT NULL
-        UNION 
-        SELECT data.start_time, data.end_time FROM data, sensor, setup WHERE setup.setup_id = {setup} AND 
-        data.fk_session_uuid = setup.fk_session_uuid AND data.fk_sensor_uuid = sensor.sensor_uuid AND 
-        sensor.name = '{sensor}' {sch_str} {ref_str}"""
-        start, end = self._execute_and_fetch(query, 2)
+            query = f"""
+               SELECT data.start_time, data.end_time
+               FROM data, sensor
+               WHERE data.fk_setup_id = {setup}
+               AND data.fk_sensor_uuid = sensor.sensor_uuid
+               AND sensor.name = '{sensor}' {sch_str} {ref_str}
+               AND data.start_time IS NOT NULL
+               UNION 
+               SELECT data.start_time, data.end_time FROM data, sensor, setup WHERE setup.setup_id = {setup} AND 
+               data.fk_session_uuid = setup.fk_session_uuid AND data.fk_sensor_uuid = sensor.sensor_uuid AND 
+               sensor.name = '{sensor}' {sch_str} {ref_str}"""
+            start, end = self._execute_and_fetch(query, 2)
+
         if start is not None:
             if self.mysql_db == 'neteera_cloud_mirror':
                 time_zone = 'utc'

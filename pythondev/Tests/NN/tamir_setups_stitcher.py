@@ -2,15 +2,17 @@ from datetime import datetime
 import pytz
 import numpy as np
 import json
-from local_DB_API.db_constants import Sensor, VS
 from pathlib import Path
 from datetime import timedelta
 import mne
+from local_DB_API.db_constants import Sensor, VS
 from local_DB_API.vsms_db_api import DB
 import pandas as pd
 
 
-def get_gap_in_frames(db, setup, fs=500):
+def get_gap_in_frames(db, setup, fs=500, time_delta_hours=4):
+    if db.mysql_db == 'neteera_db':
+        return 0, False
     setup_dir, sess_dir = list(Path(db.setup_ref_path_npy(setup, Sensor.nes, vs=VS.phase)).parents)[1:3]
     ref_json_file = list(sess_dir.rglob('*ref_metadata.json'))[0]
     # radar_json_file = list(setup_dir.rglob('*raw_metadata.json'))[0]
@@ -18,9 +20,10 @@ def get_gap_in_frames(db, setup, fs=500):
     with open(ref_json_file, 'r') as file:
         radar_start_time_str = json.load(file)['StartDateAndTime']
         radar_start_time = datetime.fromisoformat(radar_start_time_str)
+        radar_start_time = db.setup_ts(setup, Sensor.nes)['start']
 
-    ref_start_time = mne.io.read_raw_edf(edf_path).info['meas_date'] + timedelta(hours=4)
-    if ref_start_time.replace(tzinfo=None) > datetime(year=2023, month=11, day=5):
+    ref_start_time = mne.io.read_raw_edf(edf_path).info['meas_date'] + timedelta(hours=time_delta_hours)
+    if time_delta_hours==4 and ref_start_time.replace(tzinfo=None) > datetime(year=2023, month=11, day=5):
         ref_start_time += timedelta(hours=1)
     delta_sec = abs(ref_start_time - radar_start_time)
     ref_earlier = ref_start_time < radar_start_time
@@ -39,13 +42,15 @@ def setup_end_time(setup, end_time):
 
 
 
-def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
+def stitch_and_align_setups_of_session(session=107978, phase_dir=None, setup_only=None, skip_2=False):
     device_map = {232:1, 238:1, 234:1, 236:1, 231:1,
                   240:2, 248:2, 254:2, 250:2, 251:2,
                   270:3, 268:3, 256:3, 269:3, 259:3,
-                    278:4, 279:4, 273:4, 271:4, 274:4}
+                    278:4, 279:4, 273:4, 271:4, 274:4,
+                  48:2, 36:3, 51:1}
     db = DB('neteera_cloud_mirror')
     setups = db.setups_by_session(session)
+    time_delta_hours = -2 if '007.3' in db.setup_subject(setups[0]) else 4
     device_setups = {}
     setups_start_time = {}
     setups_end_time = {}
@@ -57,13 +62,21 @@ def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
 
 
     for setup in setups:
-        setup_dir = Path(db.setup_dir(setup))
+        if skip_2 and device_map[int(db.setup_sn(setup)[-3:])] == 2:
+            continue
+        if setup == 113114:
+            setup_dir = Path(db.setup_dir(setup).replace('28', '29'))
+        else:
+            setup_dir = Path(db.setup_dir(setup))
         raw_metadata_file = list(setup_dir.rglob('*raw_metadata.json'))[0]
-        stat_file = list(setup_dir.rglob('*stat.npy'))[0]
+        try:
+            stat_file = list(setup_dir.rglob('*stat.npy'))[0]
+        except:
+            stat_file = list(setup_dir.rglob('*VS.csv'))[0]
         with open(raw_metadata_file, 'r') as file:
             raw_metadata = json.load(file)
             device_id = raw_metadata.get('device_sn')
-            setups_start_time[setup] = setup_start_time(setup, raw_metadata.get('start_time')) - timedelta(seconds=9)
+            setups_start_time[setup] = setup_start_time(setup, raw_metadata.get('start_time'))# - timedelta(seconds=9)
             setups_end_time[setup] = setup_start_time(setup, raw_metadata.get('end_time'))
 
             # Store the phase file path for the setup
@@ -72,7 +85,7 @@ def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
                 phase_file = list(Path(phase_dir).rglob(f'*{setup}_RR_phase*'))[0]
             else:
                 phase_file = db.setup_ref_path_npy(setup, Sensor.nes, vs=VS.phase)
-            hr_file = list(Path(db.setup_dir(setup)).rglob(f'*hr*'))[0]
+            hr_file = list(setup_dir.rglob(f'*hr*'))[0]
             setups_phase[setup] = phase_file
             statuses[setup] = stat_file
             setups_hr[setup] = hr_file
@@ -83,6 +96,8 @@ def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
             device_setups[device_id].append(setup)
 
     for device_id, setups_list in device_setups.items():
+        if setup_only and setup_only not in setups_list:
+            continue
         setups_list.sort(key=lambda setup: setups_start_time[setup])
         merged_setups = []
 
@@ -121,7 +136,7 @@ def stitch_and_align_setups_of_session(session=107978, phase_dir=None):
                 hr_merged = np.concatenate((hr_merged, hr_current))
 
             # Load and process the merged data
-        gap_from_ref, ref_earlier = get_gap_in_frames(db, setups_list[0], fs=fs)
+        gap_from_ref, ref_earlier = get_gap_in_frames(db, setups_list[0], fs=fs, time_delta_hours=time_delta_hours)
         device_location = device_map[int(device_id) % 1000]
         final_data_dict[tuple(setups_list)] = {'phase': phase_merged, 'gap': gap_from_ref,
                                                'device_loc': device_location, 'ref_earlier' : ref_earlier, 'stat':staus_merged,

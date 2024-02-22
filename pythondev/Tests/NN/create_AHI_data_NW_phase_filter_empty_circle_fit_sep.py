@@ -159,7 +159,8 @@ apnea_class = {'missing': -1,
         'Hypopnea': 2,
         'Mixed Apnea': 3,
         'Obstructive Apnea': 4,
-        'Noise': 5}
+        'Noise': 5,
+               'Obstructive Hypopnea': 6}
 
 
 if __name__ == '__main__':

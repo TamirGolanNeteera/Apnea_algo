@@ -105,7 +105,9 @@ def get_reference_systems_list(setup: int, vs: str, db):
             if ref in setup_ref_systems:
                 return ref
     ref_systems_without_nes = [x for x in setup_ref_systems if x != 'NES']
-    if len(ref_systems_without_nes) > 1:
+    if len(ref_systems_without_nes) > 1 and 'NES_RES' in ref_systems_without_nes:
+        ref_systems_without_nes = [x for x in ref_systems_without_nes if x != 'NES_RES']
+    elif len(ref_systems_without_nes) > 1:
         print('WARNING: more than 1 ref system detected!   \n systems:\t', *ref_systems_without_nes)
     return ref_systems_without_nes[0]
     print(f'no relevant reference system found for setup {setup}, vital sign {vs}')

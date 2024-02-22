@@ -4,6 +4,9 @@ import sys
 
 import numpy as np
 
+# from Tests.NN.create_AHI_data_NW_phase_filter_empty_circle_fit_sep import apnea_class
+from Tests.NN.tamir_setups_stitcher import get_gap_in_frames
+
 sys.path.insert(1, os.getcwd())
 # from Tests.Plots.PlotRawDataRadarCPX import*
 import argparse
@@ -12,14 +15,27 @@ from os import listdir
 from sklearn import preprocessing
 import pandas as pd
 from Tests.Utils.LoadingAPI import load_reference
-from Tests.vsms_db_api import *
+from local_DB_API.db_constants import Sensor, VS
+from local_DB_API.vsms_db_api import DB
 import keras
 from Tests.NN.create_apnea_count_AHI_data import compute_respiration, delays, getSetupRespirationCloudDBDebugWithTimestamp, MB_HQ, count_apneas_in_chunk, getSetupRespirationCloudDBDebug, getSetupRespirationLocalDBDebug, getSetupRespirationCloudDB, compute_respiration, compute_phase
 from Tests.NN.create_apnea_count_AHI_data_regression_cloud_data_no_ref import get_empty_seconds_mb, create_AHI_regression_training_data_no_ref
 import matplotlib.pyplot as plt
 import glob
 import scipy.signal as sp
+import  matplotlib
 
+matplotlib.use('TkAgg')
+
+apnea_class = {'missing': -1,
+        'Normal Breathing': 0,
+        'normal': 0,
+               'Apnea' : 1,
+        'Central Apnea': 1,
+        'Hypopnea': 2,  'Obstructive Hypopnea' :2,
+        'Mixed Apnea': 3,
+        'Obstructive Apnea': 4,
+        'Noise': 5}
 db = DB()
 home = '/Neteera/Work/homes/dana.shavit/Research/analysis/'
 base_path = '/Neteera/Work/homes/dana.shavit/Research/analysis/vsm_nwh_1707_TrinityLT/save_zc_selected_sessions/'
@@ -41,9 +57,13 @@ base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config_tes
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug_test/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_embedded_orig_config_test2/scaled/'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_3/scaled/'
-base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug/scaled/'
 base_path  = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2_chnage_valid/scaled'
 base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_2_no_hupopnea'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_train/001_MB/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data/old_NWH_MB/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug_train_w_raligh/scaled/'
+base_path = '/Neteera/Work/homes/tamir.golan/Apnea_data_tamir_wo_bug_ss_pred/scaled/'
 
 
 
@@ -209,18 +229,29 @@ if __name__ == '__main__':
     y_pred_2class = []
     res = {}
     sessions_processed = []
-    setups =  list(set([int(s)  for s in [fn[0:fn.find('_')] for fn in os.listdir('/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_3/scaled/')] if str.isdigit(s)]))
+    # setups =  list(set([int(s)  for s in [fn[0:fn.find('_')] for fn in os.listdir('/Neteera/Work/homes/tamir.golan/Apnea_data/embedded_Model_3/scaled/')] if str.isdigit(s)]))
+    # setups = [112051]
     db.update_mysql_db(0)
     # setups = db.setups_by_session(108148)
     for i_sess, sess in enumerate(setups):
-        # if db.session_from_setup(sess) != 108370:
+        # if i_sess > 0:
         #     continue
+        if '-NC-' in db.setup_subject(sess):
+            continue
+        # sess = 112128
         db.update_mysql_db(sess)
+        device_id = db.setup_sn(sess)
+        if sess > 12000:
+            device_location = device_map[int(device_id) % 1000]
+            if device_location not in [1]:
+                continue
+        else:
+            device_location = 0
 
         session = db.session_from_setup(sess)
         # if session != 108186:
         #     continue
-        rejected = [108146, 108152]
+        rejected = [108146, 108152, 108168, 108298, 108201]
         if session in rejected:
             continue
 #        fig, ax = plt.subplots(4, sharex=False, figsize=(14, 7))
@@ -249,10 +280,15 @@ if __name__ == '__main__':
         # if len(respiration) / fs_new < min_setup_length:
         #     continue
 
-        model_path = os.path.join('/Neteera/Work/homes/dana.shavit/work/300622/Vital-Signs-Tracking/pythondev/', 'NN', 'apnea')
+        # model_path = os.path.join('/Neteera/Work/homes/dana.shavit/work/300622/Vital-Signs-Tracking/pythondev/', 'NN', 'apnea')
+        # model_path = '/Neteera/Work/homes/tamir.golan/Apnea_train/001/model'
+        model_path = '/Neteera/Work/homes/tamir.golan/Apnea_train/006/model'
+        #
+        # json_fn = '6284_model.json'
+        # hdf_fn = '6284_model.hdf5'
+        json_fn = 'nw+mb1_model.json'
+        hdf_fn = 'nw+mb1_model.hdf5'
 
-        json_fn = '6284_model.json'
-        hdf_fn = '6284_model.hdf5'
         json_file = open(os.path.join(model_path, json_fn), 'r')
         model_json = json_file.read()
         json_file.close()
@@ -327,10 +363,6 @@ if __name__ == '__main__':
         # ax[3].plot(ss, c='blue', alpha=0.5, linewidth=0.5)
         # ax[2].plot(apnea, c='blue', alpha=0.5, linewidth=0.5)
 
-        device_id = db.setup_sn(sess)[0]
-        device_location = device_map[int(device_id) % 1000]
-        # if device_location in [2,4]:
-        #     continue
 
 
         ahi = np.mean(preds)*4
@@ -348,7 +380,20 @@ if __name__ == '__main__':
         pahi_from_y =  num_apneas_from_y / (np.count_nonzero(ss)/3600)
         # yair_ahi_dict[session] = yair_ahi
         dana_ahi_dict[session] = pahi_from_y
-        session_ahi_pdf_dict = {108139: 1.2, 108145: 10.8, 108186: 56.6, 108168: 37.6, 108146: 0.8, 108147: 6.1, 108148: 29.2, 108153: 5.4, 108154: 3.8, 108152: 16.2, 108170: 2.7, 108171: 13.7, 108175: 0.4, 108207: 5.5, 108191: 9.6, 108192: 4.1, 108201: 13.6, 108223: 8.9, 108298: 23.1, 108222: 5.2, 108226: 1.9, 108299: 11.8, 108303: 1.2, 108331: 3.7, 108348: 15.8, 108335: 9.8, 108349: 48.2}
+        session_ahi_pdf_dict = {108139: 1.2, 108145: 10.8, 108186: 56.6, 108168: 37.6, 108146: 0.8, 108147: 6.1, 108148: 29.2, 108153: 5.4,
+                                108154: 3.8, 108152: 16.2, 108170: 2.7, 108171: 13.7, 108175: 0.4, 108207: 5.5, 108191: 9.6, 108192: 4.1,
+                                108201: 13.6, 108223: 8.9, 108298: 23.1, 108222: 5.2, 108226: 1.9, 108299: 11.8, 108303: 1.2, 108331: 3.7,
+                                108348: 15.8, 108335: 9.8, 108349: 48.2, }
+        subject_ahi_pdf_dict = {'007.2-SC-F4-R1-001': 1.2, '007.2-SC-F4-R1-002': 10.8, '007.2-SC-F4-R3-003': 56.6, '007.2-SC-F4-R2-009': 5.4,
+         '007.2-SC-F4-R2-011': 3.8, '007.2-SC-F4-R3-011': 5.5, '007.2-SC-F4-R2-012': 9.6, '007.2-SC-F4-R2-013': 4.1,
+         '007.2-SC-F4-R2-017': 1.9, '007.2-SC-F4-R1-019': 1.2, '007.2-SC-F4-R2-021': 3.7, '007.2-SC-F4-R3-022': 15.8,
+         '007.2-SC-F4-R3-023': 9.8, '007.2-SC-F4-R2-024': 48.2, '007.2-SC-F4-R1-025': 1.4, '007.2-SC-F4-R2-026': 47.4,
+         '007.2-SC-F4-R3-028': 15.7, '007.2-SC-F4-R2-029': 6.8, '007.2-SC-F4-R3-030': 50.8, '007.2-SC-F4-R3-031': 22.5,
+         '007.2-SC-F4-R1-033': 5.2, '007.2-SC-F4-R2-034': 2.3, '007.2-SC-F4-R2-035': 13, '007.2-SC-F4-R1-036': 87.5,
+         '007.2-SC-F4-R2-037': 44.1, '007.2-SC-F4-R3-038': 15.2, '007.2-SC-F4-R2-039': 23.1, '007.2-SC-F4-R3-040': 44.3,
+         '007.2-SC-F4-R2-018': 11.8}
+        pahi_from_pdf = subject_ahi_pdf_dict[db.setup_subject(sess)]
+        pahi_from_y = pahi_from_pdf
         num_apneas_from_pred = np.sum(preds)
         pahi_from_pred = 4*num_apneas_from_pred/len(preds)
 
@@ -356,21 +401,55 @@ if __name__ == '__main__':
         # num_apneas_from_y_valid = np.sum(y[valid==1])
         # pahi_from_y_valid = 4*num_apneas_from_y_valid / len_valid
         num_apneas_from_pred_valid = np.sum(preds[valid==1])
-        pahi_from_pred_valid = num_apneas_from_pred_valid / (len_valid / 4)
+        pahi_from_pred_valid = num_apneas_from_pred_valid / (np.count_nonzero(ss)/3600)
 
         print("#apneas", num_apneas_from_y, num_apneas_from_pred, pahi_from_y, pahi_from_pred)
         print("#apneas valid", num_apneas_from_pred_valid, pahi_from_pred_valid)
         p_dana[sess] = dana_from_y
         p_yair[sess] = pahi_from_y
 
+
+
         print(valid)
-        res_dict[session][sess] = {'device': db.setup_sn(sess)[0][-3:],
+        res_dict[session][sess] = {'device': db.setup_sn(sess)[-3:],
         'pahi_from_y': pahi_from_y, 'pahi_from_pred': pahi_from_pred, 'pahi_from_pred_valid': pahi_from_pred_valid}
         outfolder = base_path
 
 
         y_true.append(pahi_from_y)
         y_pred.append(pahi_from_pred_valid)
+        if db.session_from_setup(sess) == 108186:
+            from pathlib import Path
+            gap = get_gap_in_frames(db, sess, fs=1)[0]
+            apnea = np.load(list(Path(db.setup_dir(sess)).parent.rglob('*pnea*'))[0], allow_pickle=True)
+            apnea = [apnea_class[ap] if ap is not None else 0 for ap in apnea]
+            apnea = np.repeat(apnea[gap:], 10)
+            spo2 = load_reference(sess, vital_sign=VS.spo2.value, db=db)[::50][10*gap:]
+            spo2[spo2<80] = None
+            spo2[spo2>102] = None
+            spo2 = spo2 - 90
+            np.repeat(spo2[::10], 10)
+            spo2 = np.round(spo2)
+            X[abs(X) > 10] = None
+            wake = ss
+            wake = np.repeat(wake, 10)
+            wake = wake - 3
+            wake[wake !=-3] = None
+
+            plt.figure()
+            plt.plot(X.flatten(), linewidth=0.7)
+            plt.plot(apnea)
+            plt.plot(np.repeat(y, 10 * 15 * 60))
+            plt.plot(np.repeat(preds, 10 * 15 * 60))
+            plt.plot(spo2, linewidth=0.5)
+            plt.plot(wake)
+
+            # plt.plot(np.diff(spo2))
+            plt.title(sess)
+            # plt.show(block=False)
+            plt.close()
+            # continue
+
 
         res[sess] = [pahi_from_y, pahi_from_pred_valid]
         def ahi_class(ahi):
@@ -439,6 +518,7 @@ if __name__ == '__main__':
 
 
     for device in range(1,5):
+        miss_prec = 0
         y_true_2class = []
         y_pred_2class = []
         plt.figure(figsize=(10, 10))
@@ -458,8 +538,10 @@ if __name__ == '__main__':
                     plt.scatter(setup_data['pahi_from_y'], setup_data['pahi_from_pred_valid'], alpha=0.8, c=color_radar[device_loc], s=5)
                     y_true_2class.append([0 if ahi_class(setup_data['pahi_from_y']) <= 1 else 1])
                     y_pred_2class.append([0 if ahi_class( setup_data['pahi_from_pred_valid']) <= 1 else 1])
+                    setup_data['miss %'] = int(abs(100 *(setup_data['pahi_from_y']  - setup_data['pahi_from_pred_valid'])/setup_data['pahi_from_y']))
+                    miss_prec += setup_data['miss %']
 
-                    plt.text(setup_data['pahi_from_y'], setup_data['pahi_from_pred_valid'], str(device_loc) + ' ' + str(session), fontsize=6, alpha=0.6, c=color_radar[device_loc])
+                    plt.text(setup_data['pahi_from_y'], setup_data['pahi_from_pred_valid'], str(device_loc) + ' ' + str(session) + ' ' + str(int(setup_data['miss %'])) + '%', fontsize=6, alpha=0.6, c=color_radar[device_loc])
                 except:
                     print(2)
         th = [5, 15, 30]
@@ -478,9 +560,9 @@ if __name__ == '__main__':
         TN = cm2[0][0]
         FN = cm2[0][1]
         FP = cm2[1][0]
-        plt.title(f"MB2 AHI device {device} TP: {TP}/{(TP+FN)} ,TN: {TN}/{TN+FP}, TOTAL: {TP+TN}/{TP+TN+FN+FP}")
+        plt.title(f"MB2 AHI device {device} TP: {TP}/{(TP+FN)} ,TN: {TN}/{TN+FP}, TOTAL: {TP+TN}/{TP+TN+FN+FP}, miss %: {int(miss_prec/len(y_pred_2class))}")
 
-        plt.savefig(os.path.join(base_path, f'scatter_device_{device}_part.png'))
+        plt.savefig(os.path.join(base_path, f'scatter_device_{device}_partA.png'))
         plt.show()
         plt.close()
     print("y_pred", y_pred)
